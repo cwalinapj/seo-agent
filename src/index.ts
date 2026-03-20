@@ -226,6 +226,33 @@ function tokenFromRequest(request: Request): string {
   return (queryToken || "").trim();
 }
 
+function auditActorFromRequest(request: Request): string {
+  const token = tokenFromRequest(request);
+  if (!token) return "anonymous";
+  return `token:${token.slice(0, 6)}...`;
+}
+
+async function writeAuditLog(
+  env: Env,
+  request: Request,
+  siteId: string | null,
+  action: string,
+  payload: Record<string, unknown>
+) {
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const id = `audit_${now}_${Math.random().toString(36).slice(2, 10)}`;
+    await env.DB.prepare(
+      `INSERT INTO audit_logs (id, site_id, action, actor, request_path, payload_json, created_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`
+    )
+      .bind(id, siteId, action, auditActorFromRequest(request), new URL(request.url).pathname, JSON.stringify(payload), now)
+      .run();
+  } catch {
+    // Fail open until the audit_logs migration is applied in every environment.
+  }
+}
+
 function requiresAuth(env: Env): boolean {
   return Boolean((env.ADMIN_API_TOKEN || "").trim());
 }
@@ -760,6 +787,12 @@ export default {
         .bind(citationId, siteId, sourceId, listingUrl, now)
         .run();
 
+      await writeAuditLog(env, request, siteId, "listing_url_saved", {
+        source_id: sourceId,
+        source_name: sourceMatch.source_name,
+        listing_url: listingUrl,
+      });
+
       return json({
         ok: true,
         site_id: siteId,
@@ -818,6 +851,12 @@ export default {
       )
         .bind(citationId, siteId, sourceId, listingUrl, now)
         .run();
+
+      await writeAuditLog(env, request, siteId, "custom_citation_saved", {
+        source_id: sourceId,
+        source_name: sourceName,
+        listing_url: listingUrl,
+      });
 
       return json({
         ok: true,
@@ -931,6 +970,13 @@ export default {
           .run();
       }
 
+      await writeAuditLog(env, request, siteId, "citation_updated", {
+        source_id: sourceId,
+        status,
+        has_notes: Boolean(notes),
+        follow_up_at: followUpAt || null,
+      });
+
       return json({
         ok: true,
         site_id: siteId,
@@ -940,6 +986,30 @@ export default {
         follow_up_at: followUpAt || null,
         updated_at: now,
       });
+    }
+
+    const auditMatch = url.pathname.match(/^\/api\/sites\/([^/]+)\/audit$/);
+    if (auditMatch) {
+      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+      const siteId = decodeURIComponent(auditMatch[1]);
+      const rows = await env.DB.prepare(
+        `SELECT id, site_id, action, actor, request_path, payload_json, created_at
+         FROM audit_logs
+         WHERE site_id = ?1
+         ORDER BY created_at DESC
+         LIMIT 200`
+      )
+        .bind(siteId)
+        .all<{
+          id: string;
+          site_id: string | null;
+          action: string;
+          actor: string | null;
+          request_path: string | null;
+          payload_json: string | null;
+          created_at: number;
+        }>();
+      return json({ site_id: siteId, logs: rows.results ?? [] });
     }
 
     const evidenceMatch = url.pathname.match(/^\/api\/sites\/([^/]+)\/citations\/([^/]+)\/evidence$/);
@@ -1060,6 +1130,12 @@ export default {
           existing?.notes ?? null
         )
         .run();
+
+      await writeAuditLog(env, request, siteId, "evidence_uploaded", {
+        source_id: sourceId,
+        evidence_kind: newest.kind,
+        evidence_count: evidenceItems.length,
+      });
 
       return json({
         ok: true,
