@@ -3,6 +3,8 @@ export interface Env {
   EVIDENCE_BUCKET: R2Bucket;
   ADMIN_API_TOKEN?: string;
   ALLOWED_SITE_IDS?: string;
+  CORS_ALLOWED_ORIGINS?: string;
+  RATE_LIMIT_PER_MINUTE?: string;
   MAX_EVIDENCE_BYTES?: string;
   EVIDENCE_RETENTION_DAYS?: string;
   OTRUST_SSO_LOGIN_URL?: string;
@@ -64,6 +66,7 @@ const corsHeaders = {
   "access-control-allow-methods": "GET,POST,OPTIONS",
   "access-control-allow-headers": "content-type",
 };
+const rateBuckets = new Map<string, { count: number; resetAt: number }>();
 
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), {
@@ -306,6 +309,37 @@ function siteIsAllowed(siteId: string, env: Env): boolean {
   const allowed = allowedSiteSet(env);
   if (allowed.size === 0) return true;
   return allowed.has(siteId);
+}
+
+function originIsAllowed(request: Request, env: Env): boolean {
+  const raw = String(env.CORS_ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+  if (!raw.length) return true;
+  const origin = request.headers.get("origin") || "";
+  if (!origin) return true;
+  return raw.includes(origin);
+}
+
+function isWriteMethod(method: string): boolean {
+  return method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE";
+}
+
+function checkRateLimit(request: Request, env: Env): { allowed: boolean; retryAfter: number } {
+  const limit = Number(env.RATE_LIMIT_PER_MINUTE || "120");
+  const now = Date.now();
+  const key = request.headers.get("cf-connecting-ip") || "unknown";
+  const bucket = rateBuckets.get(key);
+  if (!bucket || now >= bucket.resetAt) {
+    rateBuckets.set(key, { count: 1, resetAt: now + 60_000 });
+    return { allowed: true, retryAfter: 0 };
+  }
+  if (bucket.count >= limit) {
+    return { allowed: false, retryAfter: Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)) };
+  }
+  bucket.count += 1;
+  return { allowed: true, retryAfter: 0 };
 }
 
 function makeEvidenceId(): string {
@@ -744,20 +778,39 @@ export default {
       return json({ ok: true, service: "seo-agent", date: new Date().toISOString() });
     }
 
-    if (url.pathname.startsWith("/api/")) {
-      if (!authorizedForRequest(request, env)) {
-        return json(
-          {
-            error: "Unauthorized",
-            hint: "Set ADMIN_API_TOKEN and pass it via Authorization: Bearer <token> or ?api_key=<token>.",
+      if (url.pathname.startsWith("/api/")) {
+        if (!originIsAllowed(request, env)) {
+          return json({ error: "Origin is not allowed." }, 403);
+        }
+        if (!authorizedForRequest(request, env)) {
+          return json(
+            {
+              error: "Unauthorized",
+              hint: "Set ADMIN_API_TOKEN and pass it via Authorization: Bearer <token> or ?api_key=<token>.",
           },
           401
         );
+        }
+        if (!siteIsAllowed(siteIdFromPath, env)) {
+          return json({ error: "Forbidden for this site_id." }, 403);
+        }
+        if (isWriteMethod(request.method)) {
+          const limit = checkRateLimit(request, env);
+          if (!limit.allowed) {
+            return new Response(
+              JSON.stringify({ error: "Rate limit exceeded", retry_after: limit.retryAfter }),
+              {
+                status: 429,
+                headers: {
+                  "content-type": "application/json; charset=utf-8",
+                  "retry-after": String(limit.retryAfter),
+                  ...corsHeaders,
+                },
+              }
+            );
+          }
+        }
       }
-      if (!siteIsAllowed(siteIdFromPath, env)) {
-        return json({ error: "Forbidden for this site_id." }, 403);
-      }
-    }
 
       if (url.pathname === "/api/auth/login") {
         return buildSsoLoginRedirect(request, env);
