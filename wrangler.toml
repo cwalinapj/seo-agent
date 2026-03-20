@@ -26,3 +26,53 @@ OTRUST_SSO_LOGIN_URL = "" # set to your OTrust/IdP login URL
 OTRUST_SSO_CLIENT_ID = "" # optional
 BROWSER_CHECKER_URL = "" # ex: https://your-browser-checker.example.com
 BROWSER_CHECKER_TOKEN = "" # optional bearer token shared with browser checker
+
+[env.staging]
+name = "seo-agent-staging"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "seo_agent_staging"
+database_id = "REPLACE_WITH_STAGING_DB_ID"
+
+[[env.staging.r2_buckets]]
+binding = "EVIDENCE_BUCKET"
+bucket_name = "seo-agent-evidence-staging"
+
+[env.staging.vars]
+MAIL_FROM_EMAIL = "admin@aiwpdev.com"
+MAIL_FROM_NAME = "AI SEO Agent (Staging)"
+DASHBOARD_BASE_URL = "https://staging.aiwpadmin.com"
+ADMIN_API_TOKEN = ""
+ALLOWED_SITE_IDS = ""
+MAX_EVIDENCE_BYTES = "2097152"
+EVIDENCE_RETENTION_DAYS = "365"
+OTRUST_SSO_LOGIN_URL = ""
+OTRUST_SSO_CLIENT_ID = ""
+BROWSER_CHECKER_URL = ""
+BROWSER_CHECKER_TOKEN = ""
+
+[env.production]
+name = "seo-agent-prod"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "seo_agent_prod"
+database_id = "REPLACE_WITH_PROD_DB_ID"
+
+[[env.production.r2_buckets]]
+binding = "EVIDENCE_BUCKET"
+bucket_name = "seo-agent-evidence-prod"
+
+[env.production.vars]
+MAIL_FROM_EMAIL = "admin@aiwpdev.com"
+MAIL_FROM_NAME = "AI SEO Agent"
+DASHBOARD_BASE_URL = "https://aiwpadmin.com"
+ADMIN_API_TOKEN = ""
+ALLOWED_SITE_IDS = ""
+MAX_EVIDENCE_BYTES = "2097152"
+EVIDENCE_RETENTION_DAYS = "365"
+OTRUST_SSO_LOGIN_URL = ""
+OTRUST_SSO_CLIENT_ID = ""
+BROWSER_CHECKER_URL = ""
+BROWSER_CHECKER_TOKEN = ""

@@ -6,7 +6,11 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:prod": "wrangler deploy --env production",
     "db:migrate": "wrangler d1 migrations apply seo_agent --remote",
+    "db:migrate:staging": "wrangler d1 migrations apply seo_agent_staging --remote",
+    "db:migrate:prod": "wrangler d1 migrations apply seo_agent_prod --remote",
     "db:seed": "wrangler d1 execute seo_agent --remote --file=./seeds_citation_sources.sql",
     "check": "node ./scripts/check.js",
     "test": "node --test tests/*.mjs",
