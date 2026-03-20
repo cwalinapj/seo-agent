@@ -3,6 +3,8 @@ export interface Env {
   EVIDENCE_BUCKET: R2Bucket;
   ADMIN_API_TOKEN?: string;
   ALLOWED_SITE_IDS?: string;
+  MAX_EVIDENCE_BYTES?: string;
+  EVIDENCE_RETENTION_DAYS?: string;
   OTRUST_SSO_LOGIN_URL?: string;
   OTRUST_SSO_CLIENT_ID?: string;
   BROWSER_CHECKER_URL?: string;
@@ -34,6 +36,7 @@ type EvidenceItem = {
   r2_key?: string;
   note?: string;
   created_at: number;
+  expires_at?: number;
 };
 
 type SourceRow = {
@@ -292,6 +295,22 @@ function base64ToBytes(base64: string): Uint8Array {
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
   return bytes;
+}
+
+function maxEvidenceBytes(env: Env): number {
+  const parsed = Number(env.MAX_EVIDENCE_BYTES || "");
+  if (!Number.isFinite(parsed) || parsed <= 0) return 2 * 1024 * 1024;
+  return Math.floor(parsed);
+}
+
+function evidenceRetentionSeconds(env: Env): number {
+  const days = Number(env.EVIDENCE_RETENTION_DAYS || "");
+  if (!Number.isFinite(days) || days <= 0) return 0;
+  return Math.floor(days * 86400);
+}
+
+function isExpiredEvidence(item: EvidenceItem, nowSeconds: number): boolean {
+  return Boolean(item.expires_at && nowSeconds >= item.expires_at);
 }
 
 function safeFileName(input: string): string {
@@ -621,6 +640,45 @@ async function checkListings(env: Env, domain: string, businessName: string) {
     },
     checks,
   };
+}
+
+async function cleanupExpiredEvidence(env: Env): Promise<void> {
+  const now = Math.floor(Date.now() / 1000);
+  const rows = await env.DB.prepare(
+    `SELECT id, site_id, source_id, evidence_json
+     FROM citations
+     WHERE evidence_json IS NOT NULL AND evidence_json <> ''`
+  ).all<{
+    id: string;
+    site_id: string;
+    source_id: string;
+    evidence_json: string | null;
+  }>();
+
+  for (const row of rows.results ?? []) {
+    const evidenceItems = parseEvidenceJson(row.evidence_json ?? "[]");
+    const keep: EvidenceItem[] = [];
+    const remove: EvidenceItem[] = [];
+    for (const item of evidenceItems) {
+      if (isExpiredEvidence(item, now)) remove.push(item);
+      else keep.push(item);
+    }
+    if (!remove.length) continue;
+
+    for (const item of remove) {
+      if (item.kind === "file" && item.r2_key) {
+        await env.EVIDENCE_BUCKET.delete(item.r2_key);
+      }
+    }
+
+    await env.DB.prepare(
+      `UPDATE citations
+       SET evidence_json = ?1, updated_at = ?2
+       WHERE id = ?3`
+    )
+      .bind(JSON.stringify(keep), now, row.id)
+      .run();
+  }
 }
 
 function buildSsoLoginRedirect(request: Request, env: Env): Response {
@@ -1042,14 +1100,16 @@ export default {
       const contentType = (body.content_type || "").trim().slice(0, 120);
       const dataBase64 = (body.data_base64 || "").trim();
       const note = normalizeEvidenceNote(body.note || "");
+      const retentionSeconds = evidenceRetentionSeconds(env);
 
       const isLink = Boolean(evidenceUrl);
       const isFile = Boolean(fileName && contentType && dataBase64);
       if (!isLink && !isFile) {
         return json({ error: "Provide either evidence_url or file upload data." }, 400);
       }
-      if (isFile && dataBase64.length > 700000) {
-        return json({ error: "Uploaded file is too large for inline storage." }, 400);
+      const fileBytes = isFile ? base64ToBytes(dataBase64) : null;
+      if (isFile && fileBytes && fileBytes.byteLength > maxEvidenceBytes(env)) {
+        return json({ error: `Uploaded file exceeds max size (${maxEvidenceBytes(env)} bytes).` }, 400);
       }
 
       const sourceExists = await env.DB.prepare(`SELECT id FROM citation_sources WHERE id = ?1`).bind(sourceId).first();
@@ -1084,6 +1144,7 @@ export default {
               url: evidenceUrl,
               note: note || undefined,
               created_at: now,
+              expires_at: retentionSeconds ? now + retentionSeconds : undefined,
             }
           : {
               id: makeEvidenceId(),
@@ -1092,13 +1153,14 @@ export default {
               content_type: contentType,
               note: note || undefined,
               created_at: now,
+              expires_at: retentionSeconds ? now + retentionSeconds : undefined,
             }
       );
 
       const newest = evidenceItems[0];
       if (newest.kind === "file") {
         const r2Key = makeEvidenceKey(siteId, sourceId, newest.id, fileName);
-        await env.EVIDENCE_BUCKET.put(r2Key, base64ToBytes(dataBase64), {
+        await env.EVIDENCE_BUCKET.put(r2Key, fileBytes || new Uint8Array(), {
           httpMetadata: {
             contentType,
             contentDisposition: contentDispositionForEvidence(contentType, fileName),
@@ -1164,6 +1226,9 @@ export default {
 
       const item = parseEvidenceJson(citation?.evidence_json ?? "[]").find((entry) => entry.id === evidenceId);
       if (!item) return text("Not found", 404);
+      if (isExpiredEvidence(item, Math.floor(Date.now() / 1000))) {
+        return text("Evidence expired", 410);
+      }
 
       if (item.kind === "link" && item.url) {
         return Response.redirect(item.url, 302);
@@ -1318,7 +1383,7 @@ export default {
     return text("Not found", 404);
   },
 
-  async scheduled(_event: ScheduledEvent, _env: Env, _ctx: ExecutionContext): Promise<void> {
-    // Placeholder for future daily jobs configured in wrangler.toml.
+  async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
+    await cleanupExpiredEvidence(env);
   },
 };
