@@ -256,6 +256,28 @@ async function writeAuditLog(
   }
 }
 
+async function writeAppEvent(
+  env: Env,
+  level: "info" | "warn" | "error",
+  eventType: string,
+  message: string,
+  path: string,
+  details: Record<string, unknown>
+) {
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const id = `evt_${now}_${Math.random().toString(36).slice(2, 10)}`;
+    await env.DB.prepare(
+      `INSERT INTO app_events (id, level, event_type, message, path, details_json, created_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`
+    )
+      .bind(id, level, eventType, message, path, JSON.stringify(details), now)
+      .run();
+  } catch {
+    // fail open
+  }
+}
+
 function requiresAuth(env: Env): boolean {
   return Boolean((env.ADMIN_API_TOKEN || "").trim());
 }
@@ -709,12 +731,14 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const siteIdFromPath = extractSiteIdFromPath(url.pathname);
+    const startedAt = Date.now();
 
-    if (request.method === "OPTIONS") return options();
+    try {
+      if (request.method === "OPTIONS") return options();
 
-    if (request.method !== "GET" && request.method !== "POST") {
-      return json({ error: "Method not allowed" }, 405);
-    }
+      if (request.method !== "GET" && request.method !== "POST") {
+        return json({ error: "Method not allowed" }, 405);
+      }
 
     if (url.pathname === "/" || url.pathname === "/health" || url.pathname === "/api/health") {
       return json({ ok: true, service: "seo-agent", date: new Date().toISOString() });
@@ -735,9 +759,53 @@ export default {
       }
     }
 
-    if (url.pathname === "/api/auth/login") {
-      return buildSsoLoginRedirect(request, env);
-    }
+      if (url.pathname === "/api/auth/login") {
+        return buildSsoLoginRedirect(request, env);
+      }
+
+      if (url.pathname === "/api/ops/metrics") {
+        if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+        const now = Math.floor(Date.now() / 1000);
+        const since24h = now - 86400;
+        const [citationStats, followUpStats, audit24h, errors24h] = await Promise.all([
+          env.DB.prepare(
+            `SELECT COUNT(*) AS total, SUM(CASE WHEN listing_url IS NOT NULL AND listing_url <> '' THEN 1 ELSE 0 END) AS saved
+             FROM citations`
+          ).first<{ total: number; saved: number }>(),
+          env.DB.prepare(
+            `SELECT COUNT(*) AS due
+             FROM citations
+             WHERE follow_up_at IS NOT NULL AND follow_up_at <> '' AND follow_up_at <= ?1`
+          )
+            .bind(new Date().toISOString().slice(0, 10))
+            .first<{ due: number }>(),
+          env.DB.prepare(
+            `SELECT COUNT(*) AS count
+             FROM audit_logs
+             WHERE created_at >= ?1`
+          )
+            .bind(since24h)
+            .first<{ count: number }>(),
+          env.DB.prepare(
+            `SELECT COUNT(*) AS count
+             FROM app_events
+             WHERE level = 'error' AND created_at >= ?1`
+          )
+            .bind(since24h)
+            .first<{ count: number }>(),
+        ]);
+
+        return json({
+          ok: true,
+          generated_at: new Date().toISOString(),
+          uptime_ms: Date.now() - startedAt,
+          citations_total: citationStats?.total ?? 0,
+          citations_saved: citationStats?.saved ?? 0,
+          followups_due_or_overdue: followUpStats?.due ?? 0,
+          audit_events_last_24h: audit24h?.count ?? 0,
+          error_events_last_24h: errors24h?.count ?? 0,
+        });
+      }
 
     if (url.pathname === "/api/listing-check") {
       if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
@@ -1380,7 +1448,14 @@ export default {
       });
     }
 
-    return text("Not found", 404);
+      return text("Not found", 404);
+    } catch (err) {
+      await writeAppEvent(env, "error", "unhandled_exception", String(err), url.pathname, {
+        method: request.method,
+        site_id: siteIdFromPath || null,
+      });
+      return json({ error: "Internal server error" }, 500);
+    }
   },
 
   async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
