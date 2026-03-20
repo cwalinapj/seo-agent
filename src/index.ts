@@ -61,36 +61,32 @@ type CheckResult = {
   provider: "http_fetch" | "headless_browser";
 };
 
-const corsHeaders = {
-  "access-control-allow-origin": "*",
+const corsBaseHeaders = {
   "access-control-allow-methods": "GET,POST,OPTIONS",
-  "access-control-allow-headers": "content-type",
+  "access-control-allow-headers": "content-type,authorization,x-api-key",
 };
 const rateBuckets = new Map<string, { count: number; resetAt: number }>();
 
-const json = (data: unknown, status = 200) =>
+const jsonBase = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), {
     status,
     headers: {
       "content-type": "application/json; charset=utf-8",
-      ...corsHeaders,
     },
   });
 
-const text = (body: string, status = 200) =>
+const textBase = (body: string, status = 200) =>
   new Response(body, {
     status,
     headers: {
       "content-type": "text/plain; charset=utf-8",
-      ...corsHeaders,
     },
   });
 
-const options = () =>
+const optionsBase = () =>
   new Response(null, {
     status: 204,
     headers: {
-      ...corsHeaders,
       "access-control-max-age": "86400",
     },
   });
@@ -329,8 +325,39 @@ function originIsAllowed(request: Request, env: Env): boolean {
   return raw.includes(origin);
 }
 
+function corsOriginForRequest(request: Request, env: Env): string {
+  const raw = String(env.CORS_ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+  if (!raw.length) return "*";
+  const origin = request.headers.get("origin") || "";
+  if (!origin) return "";
+  return raw.includes(origin) ? origin : "";
+}
+
+function withCors(response: Response, request: Request, env: Env): Response {
+  const headers = new Headers(response.headers);
+  const allowOrigin = corsOriginForRequest(request, env);
+  if (allowOrigin) headers.set("access-control-allow-origin", allowOrigin);
+  headers.set("access-control-allow-methods", corsBaseHeaders["access-control-allow-methods"]);
+  headers.set("access-control-allow-headers", corsBaseHeaders["access-control-allow-headers"]);
+  headers.set("vary", "Origin");
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
 function isWriteMethod(method: string): boolean {
   return method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE";
+}
+
+function parsePagination(url: URL, defaults = { limit: 100, max: 500 }) {
+  const requestedLimit = Number(url.searchParams.get("limit") || String(defaults.limit));
+  const requestedOffset = Number(url.searchParams.get("offset") || "0");
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.max(1, Math.min(defaults.max, Math.floor(requestedLimit)))
+    : defaults.limit;
+  const offset = Number.isFinite(requestedOffset) ? Math.max(0, Math.floor(requestedOffset)) : 0;
+  return { limit, offset };
 }
 
 function checkRateLimit(request: Request, env: Env): { allowed: boolean; retryAfter: number } {
@@ -746,7 +773,7 @@ async function cleanupExpiredEvidence(env: Env): Promise<void> {
 
 function buildSsoLoginRedirect(request: Request, env: Env): Response {
   if (!env.OTRUST_SSO_LOGIN_URL) {
-    return json(
+    return jsonBase(
       {
         error: "OTRUST_SSO_LOGIN_URL is not configured.",
         hint: "Set this in Wrangler vars/secrets, then retry login.",
@@ -773,6 +800,9 @@ export default {
     const url = new URL(request.url);
     const siteIdFromPath = extractSiteIdFromPath(url.pathname);
     const startedAt = Date.now();
+    const json = (data: unknown, status = 200) => withCors(jsonBase(data, status), request, env);
+    const text = (body: string, status = 200) => withCors(textBase(body, status), request, env);
+    const options = () => withCors(optionsBase(), request, env);
 
     try {
       if (request.method === "OPTIONS") return options();
@@ -804,17 +834,9 @@ export default {
         if (isWriteMethod(request.method)) {
           const limit = checkRateLimit(request, env);
           if (!limit.allowed) {
-            return new Response(
-              JSON.stringify({ error: "Rate limit exceeded", retry_after: limit.retryAfter }),
-              {
-                status: 429,
-                headers: {
-                  "content-type": "application/json; charset=utf-8",
-                  "retry-after": String(limit.retryAfter),
-                  ...corsHeaders,
-                },
-              }
-            );
+            const resp = jsonBase({ error: "Rate limit exceeded", retry_after: limit.retryAfter }, 429);
+            resp.headers.set("retry-after", String(limit.retryAfter));
+            return withCors(resp, request, env);
           }
         }
       }
@@ -891,6 +913,7 @@ export default {
       if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
       const siteId = decodeURIComponent(match[1]);
       const hasFollowUpAt = await citationsHasColumn(env, "follow_up_at");
+      const { limit, offset } = parsePagination(url, { limit: 500, max: 1000 });
 
       const site = await env.DB.prepare(
         `SELECT id, url, domain, business_name, primary_city, primary_state, email, is_active, created_at
@@ -918,14 +941,23 @@ export default {
          LEFT JOIN citations c
            ON c.source_id = cs.id
           AND c.site_id = ?1
-         ORDER BY cs.category, cs.name`
+         ORDER BY cs.category, cs.name
+         LIMIT ?2 OFFSET ?3`
       )
-        .bind(siteId)
+        .bind(siteId, limit, offset)
         .all<CitationRow>();
+      const totalResult = await env.DB.prepare(`SELECT COUNT(*) AS total FROM citation_sources`).first<{ total: number }>();
+      const total = totalResult?.total ?? 0;
 
       return json({
         site_id: siteId,
         site,
+        page: {
+          limit,
+          offset,
+          total,
+          has_more: offset + limit < total,
+        },
         citations: (rows.results ?? []).map((r) => ({
           ...r,
           status: r.status ?? "todo",
@@ -1178,14 +1210,15 @@ export default {
     if (auditMatch) {
       if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
       const siteId = decodeURIComponent(auditMatch[1]);
+      const { limit, offset } = parsePagination(url, { limit: 100, max: 500 });
       const rows = await env.DB.prepare(
         `SELECT id, site_id, action, actor, request_path, payload_json, created_at
          FROM audit_logs
          WHERE site_id = ?1
          ORDER BY created_at DESC
-         LIMIT 200`
+         LIMIT ?2 OFFSET ?3`
       )
-        .bind(siteId)
+        .bind(siteId, limit, offset)
         .all<{
           id: string;
           site_id: string | null;
@@ -1195,7 +1228,17 @@ export default {
           payload_json: string | null;
           created_at: number;
         }>();
-      return json({ site_id: siteId, logs: rows.results ?? [] });
+      const totalResult = await env.DB.prepare(
+        `SELECT COUNT(*) AS total FROM audit_logs WHERE site_id = ?1`
+      )
+        .bind(siteId)
+        .first<{ total: number }>();
+      const total = totalResult?.total ?? 0;
+      return json({
+        site_id: siteId,
+        page: { limit, offset, total, has_more: offset + limit < total },
+        logs: rows.results ?? [],
+      });
     }
 
     const evidenceMatch = url.pathname.match(/^\/api\/sites\/([^/]+)\/citations\/([^/]+)\/evidence$/);
@@ -1368,23 +1411,23 @@ export default {
         const headers = new Headers();
         object.writeHttpMetadata(headers);
         headers.set("etag", object.httpEtag);
-        headers.set("access-control-allow-origin", "*");
-        headers.set("access-control-allow-methods", "GET,POST,OPTIONS");
-        headers.set("access-control-allow-headers", "content-type");
-        return new Response(object.body, { headers });
+        return withCors(new Response(object.body, { headers }), request, env);
       }
 
       if (item.kind === "file" && item.data_base64) {
-        return new Response(base64ToBytes(item.data_base64), {
+        return withCors(
+          new Response(base64ToBytes(item.data_base64), {
           headers: {
             "content-type": item.content_type || "application/octet-stream",
             "content-disposition": contentDispositionForEvidence(
               item.content_type || "application/octet-stream",
               item.file_name || "evidence"
             ),
-            ...corsHeaders,
           },
-        });
+          }),
+          request,
+          env
+        );
       }
 
       return text("Not found", 404);
@@ -1393,6 +1436,7 @@ export default {
     if (url.pathname === "/api/listings/lookup") {
       if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
       const lookupDomain = normalizeLookupDomain(url.searchParams.get("domain") || "");
+      const { limit, offset } = parsePagination(url, { limit: 100, max: 500 });
       if (!lookupDomain) {
         return json(
           {
@@ -1418,8 +1462,11 @@ export default {
          LEFT JOIN sites s ON s.id = c.site_id
          LEFT JOIN citation_sources cs ON cs.id = c.source_id
          WHERE c.listing_url IS NOT NULL
-         ORDER BY c.updated_at DESC`
+         AND (c.listing_url LIKE ?1 OR cs.claim_url LIKE ?1)
+         ORDER BY c.updated_at DESC
+         LIMIT ?2 OFFSET ?3`
       )
+        .bind(`%${lookupDomain}%`, limit, offset)
         .all<{
           site_id: string;
           domain: string | null;
@@ -1444,9 +1491,20 @@ export default {
         }
         return hosts.some((h) => h === lookupDomain || h.endsWith(`.${lookupDomain}`) || lookupDomain.endsWith(`.${h}`));
       });
+      const totalResult = await env.DB.prepare(
+        `SELECT COUNT(*) AS total
+         FROM citations c
+         LEFT JOIN citation_sources cs ON cs.id = c.source_id
+         WHERE c.listing_url IS NOT NULL
+         AND (c.listing_url LIKE ?1 OR cs.claim_url LIKE ?1)`
+      )
+        .bind(`%${lookupDomain}%`)
+        .first<{ total: number }>();
+      const total = totalResult?.total ?? 0;
 
       return json({
         lookup_domain: lookupDomain,
+        page: { limit, offset, total, has_more: offset + limit < total },
         matches,
       });
     }
