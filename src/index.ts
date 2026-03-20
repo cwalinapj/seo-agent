@@ -193,6 +193,13 @@ function normalizeNotes(input: string): string {
   return input.trim().slice(0, 4000);
 }
 
+function normalizeEmail(input: string): string {
+  const value = input.trim().toLowerCase();
+  if (!value) return "";
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)) return "";
+  return value;
+}
+
 function normalizeFollowUpAt(input: string): string {
   const value = input.trim();
   if (!value) return "";
@@ -1441,6 +1448,123 @@ export default {
       return json({
         lookup_domain: lookupDomain,
         matches,
+      });
+    }
+
+    const exportMatch = url.pathname.match(/^\/api\/sites\/([^/]+)\/export$/);
+    if (exportMatch) {
+      if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
+      const siteId = decodeURIComponent(exportMatch[1]);
+      const site = await env.DB.prepare(
+        `SELECT id, url, domain, business_name, primary_city, primary_state, email, is_active, created_at
+         FROM sites WHERE id = ?1 LIMIT 1`
+      )
+        .bind(siteId)
+        .first();
+      if (!site) return json({ error: "site not found" }, 404);
+
+      const citations = await env.DB.prepare(
+        `SELECT id, site_id, source_id, status, listing_url, last_step, notes, follow_up_at, evidence_json, updated_at, created_at
+         FROM citations
+         WHERE site_id = ?1
+         ORDER BY updated_at DESC`
+      )
+        .bind(siteId)
+        .all();
+
+      const audit = await env.DB.prepare(
+        `SELECT id, action, actor, request_path, payload_json, created_at
+         FROM audit_logs
+         WHERE site_id = ?1
+         ORDER BY created_at DESC`
+      )
+        .bind(siteId)
+        .all();
+
+      return json({
+        exported_at: new Date().toISOString(),
+        site,
+        citations: citations.results ?? [],
+        audit_logs: audit.results ?? [],
+      });
+    }
+
+    if (url.pathname === "/api/sites/bootstrap") {
+      if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+      let body: { domain?: string; business_name?: string; email?: string } = {};
+      try {
+        body = (await request.json()) as { domain?: string; business_name?: string; email?: string };
+      } catch {
+        return json({ error: "Invalid JSON body." }, 400);
+      }
+
+      const domain = normalizeLookupDomain(body.domain || "");
+      const businessName = (body.business_name || "").trim().slice(0, 180);
+      const email = normalizeEmail(body.email || "");
+      if (!domain) {
+        return json({ error: "Missing or invalid domain." }, 400);
+      }
+      if ((body.email || "").trim() && !email) {
+        return json({ error: "Invalid email format." }, 400);
+      }
+
+      const existing = await env.DB.prepare(
+        `SELECT id, url, domain, business_name, created_at
+         FROM sites
+         WHERE domain = ?1
+         LIMIT 1`
+      )
+        .bind(domain)
+        .first<{
+          id: string;
+          url: string | null;
+          domain: string;
+          business_name: string | null;
+          created_at: number;
+        }>();
+
+      if (existing) {
+        if (businessName || email) {
+          await env.DB.prepare(
+            `UPDATE sites
+             SET business_name = COALESCE(?1, business_name),
+                 email = COALESCE(?2, email)
+             WHERE id = ?3`
+          )
+            .bind(businessName || null, email || null, existing.id)
+            .run();
+        }
+        return json({ created: false, site: { ...existing, business_name: businessName || existing.business_name } });
+      }
+
+      const now = Math.floor(Date.now() / 1000);
+      const siteId = makeSiteIdFromDomain(domain);
+      const siteUrl = `https://${domain}`;
+      await env.DB.prepare(
+        `INSERT INTO sites (
+           id, url, domain, business_name, primary_city, primary_state, email,
+           baseline_start_date, baseline_end_date, is_active, created_at
+         ) VALUES (?1, ?2, ?3, ?4, NULL, NULL, ?5, NULL, NULL, 1, ?6)`
+      )
+        .bind(siteId, siteUrl, domain, businessName || null, email || null, now)
+        .run();
+
+      await writeAuditLog(env, request, siteId, "site_bootstrap_created", {
+        domain,
+        business_name: businessName || null,
+        email: email || null,
+      });
+
+      return json({
+        created: true,
+        site: {
+          id: siteId,
+          url: siteUrl,
+          domain,
+          business_name: businessName || null,
+          email: email || null,
+          created_at: now,
+        },
       });
     }
 

@@ -154,6 +154,10 @@
           <h2>Input Domain</h2>
           <p class="subtle">Enter the domain of the website in which you would like to make citation listings for.</p>
           <div class="row">
+            <div class="grow"><input id="businessNameInput" type="text" placeholder="Business name (optional)" /></div>
+            <div class="grow"><input id="siteEmailInput" type="email" placeholder="Contact email (optional)" /></div>
+          </div>
+          <div class="row">
             <div class="grow"><input id="lookupUrlInput" type="text" placeholder="yourbusiness.com" /></div>
             <button id="openSiteBtn" type="button">Save Site</button>
           </div>
@@ -238,6 +242,7 @@
         <div class="grow"><input id="bulkFollowUp" type="date" /></div>
         <button type="button" id="bulkApplyBtn">Apply To Selected</button>
         <button type="button" id="bulkClearBtn">Clear Selection</button>
+        <button type="button" id="exportSiteBtn">Export Site JSON</button>
       </div>
       <div id="table" class="table-shell"></div>
       <div class="pager">
@@ -765,6 +770,8 @@
   async function resolveSiteFromDomain(apiBase) {
     const input = document.getElementById("lookupUrlInput");
     const statusEl = document.getElementById("lookupStatus");
+    const businessName = String(document.getElementById("businessNameInput").value || "").trim();
+    const email = String(document.getElementById("siteEmailInput").value || "").trim();
     const lookupDomain = normalizeDomainInput(input.value || "");
 
     if (!lookupDomain) {
@@ -775,7 +782,15 @@
     statusEl.textContent = "Opening site dashboard...";
 
     try {
-      const res = await authedFetch(`${apiBase}/api/sites/resolve?domain=${encodeURIComponent(lookupDomain)}`);
+      const res = await authedFetch(`${apiBase}/api/sites/bootstrap`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          domain: lookupDomain,
+          business_name: businessName || undefined,
+          email: email || undefined,
+        }),
+      });
       const payload = await res.json();
       if (!res.ok) {
         statusEl.textContent = `Unable to open site (${res.status}): ${payload.error || "Unknown error"}`;
@@ -791,6 +806,7 @@
       const u = new URL(location.href);
       u.searchParams.set("site_id", siteId);
       u.searchParams.set("api_base", apiBase);
+      if (apiToken) u.searchParams.set("api_key", apiToken);
       location.href = u.toString();
     } catch (err) {
       statusEl.textContent = `Unable to open site: ${String(err)}`;
@@ -1043,6 +1059,22 @@
     document.getElementById("bulkClearBtn").addEventListener("click", () => {
       selectedSourceIds.clear();
       renderCitations();
+    });
+    document.getElementById("exportSiteBtn").addEventListener("click", async () => {
+      if (!siteId) return;
+      const res = await authedFetch(`${apiBase}/api/sites/${encodeURIComponent(siteId)}/export`);
+      const payload = await res.json();
+      if (!res.ok) {
+        document.getElementById("saveListingStatus").textContent = `Export failed (${res.status}): ${payload.error || "Unknown error"}`;
+        return;
+      }
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = `${siteId}_export.json`;
+      a.click();
+      URL.revokeObjectURL(href);
     });
     document.getElementById("table").addEventListener("click", (event) => {
       const target = event.target;
