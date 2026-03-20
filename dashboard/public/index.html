@@ -1,0 +1,1077 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AI SEO Agent Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#07111a;
+      --bg2:#0d1826;
+      --panel:rgba(10,20,33,.78);
+      --panel-strong:rgba(8,17,28,.92);
+      --border:rgba(151,183,211,.16);
+      --text:#edf6ff;
+      --subtle:rgba(216,231,246,.72);
+      --link:#8bd4ff;
+      --ok:#77ddab;
+      --warn:#ffd27a;
+      --bad:#ff8f86;
+      --accent:#3cb8ff;
+      --accent-2:#7cf7d4;
+      --shadow:0 18px 48px rgba(0,0,0,.28);
+    }
+    *{box-sizing:border-box}
+    body{font-family:"Manrope",system-ui,sans-serif;margin:0;background:
+      radial-gradient(circle at top left, rgba(60,184,255,.16), transparent 32%),
+      radial-gradient(circle at top right, rgba(124,247,212,.10), transparent 26%),
+      linear-gradient(180deg, var(--bg), var(--bg2));
+      color:var(--text)}
+    .wrap{max-width:1280px;margin:0 auto;padding:24px;display:grid;gap:16px}
+    .card{background:var(--panel);backdrop-filter:blur(14px);border:1px solid var(--border);border-radius:22px;padding:18px;box-shadow:var(--shadow)}
+    .hero{background:linear-gradient(135deg, rgba(60,184,255,.16), rgba(124,247,212,.09) 52%, rgba(10,20,33,.9));border-color:rgba(139,212,255,.2)}
+    .top-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:16px}
+    .action-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+    h1,h2{margin:0 0 8px 0}
+    h1,h2,.summary-card strong,.queue-box h3,.saved-card strong{font-family:"Space Grotesk","Manrope",sans-serif}
+    h1{font-size:clamp(40px,6vw,64px);line-height:.95;letter-spacing:-.04em;max-width:10ch}
+    h2{font-size:24px;letter-spacing:-.03em}
+    p{margin:6px 0}
+    .subtle{color:var(--subtle)}
+    .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+    .grow{flex:1;min-width:240px}
+    input,select{width:100%;background:rgba(255,255,255,.05);color:var(--text);border:1px solid rgba(151,183,211,.18);border-radius:14px;padding:12px 14px;font-size:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
+    textarea{width:100%;min-height:88px;background:rgba(255,255,255,.05);color:var(--text);border:1px solid rgba(151,183,211,.18);border-radius:14px;padding:12px 14px;font-size:14px;resize:vertical;box-shadow:inset 0 1px 0 rgba(255,255,255,.03)}
+    input:focus,select:focus,textarea:focus{outline:none;border-color:rgba(139,212,255,.42);box-shadow:0 0 0 4px rgba(60,184,255,.12)}
+    button,a.btn{background:linear-gradient(135deg, #2f91ff, #23c6ff);color:white;border:none;border-radius:14px;padding:12px 14px;font-size:14px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block;box-shadow:0 12px 28px rgba(23,114,197,.34)}
+    button:disabled{opacity:.6;cursor:not-allowed}
+    table{width:100%;border-collapse:collapse;background:transparent;border:1px solid rgba(151,183,211,.14);border-radius:16px;overflow:hidden}
+    th,td{padding:12px;border-bottom:1px solid rgba(255,255,255,.08);font-size:14px;vertical-align:top}
+    th{color:var(--subtle);text-align:left;font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+    a{color:var(--link)}
+    .pill{padding:4px 9px;border:1px solid rgba(151,183,211,.18);border-radius:999px;font-size:12px;background:rgba(255,255,255,.03)}
+    .status-listed{color:var(--ok);font-weight:600}
+    .status-possible{color:var(--warn);font-weight:600}
+    .status-not_found,.status-error{color:var(--bad);font-weight:600}
+    code{background:rgba(255,255,255,.08);padding:2px 6px;border-radius:6px}
+    .summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:12px}
+    .summary-card{background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02));border:1px solid var(--border);border-radius:18px;padding:14px}
+    .summary-card strong{display:block;font-size:24px;margin-bottom:4px}
+    .hero-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:18px}
+    .hero-stat{background:rgba(7,18,29,.58);border:1px solid rgba(151,183,211,.16);border-radius:18px;padding:14px}
+    .hero-stat span{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--subtle);margin-bottom:6px}
+    .hero-stat strong{display:block;font-size:18px}
+    .queue-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+    .queue-box{background:rgba(255,255,255,.035);border:1px solid var(--border);border-radius:18px;padding:14px}
+    .queue-box h3{margin:0 0 10px 0;font-size:16px}
+    .queue-list{display:grid;gap:8px}
+    .queue-item{border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:12px;background:rgba(255,255,255,.02)}
+    .queue-item strong{display:block;margin-bottom:4px}
+    .queue-item[data-source-id]{cursor:pointer}
+    .queue-item[data-source-id]:hover{border-color:rgba(124,199,255,.45);background:rgba(124,199,255,.06)}
+    .citation-row-target{scroll-margin-top:18px}
+    .citation-row-target.row-focus{outline:2px solid rgba(124,199,255,.75);outline-offset:-2px;background:rgba(124,199,255,.05)}
+    .filters{margin-bottom:12px}
+    .filters .grow{min-width:160px}
+    .toggle-chip{display:flex;align-items:center;gap:10px;padding:11px 14px;border:1px solid rgba(151,183,211,.18);border-radius:14px;background:rgba(255,255,255,.04);min-height:48px}
+    .toggle-chip input{width:auto;margin:0;accent-color:var(--accent)}
+    .table-shell thead th.sortable{cursor:pointer;user-select:none}
+    .table-shell thead th.sortable:hover{color:var(--text)}
+    .table-shell thead th.active-sort{color:var(--accent-2)}
+    .check-col{width:42px;text-align:center}
+    .check-col input{width:auto}
+    .bulk-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:6px}
+    .bulk-actions .grow{min-width:170px}
+    .bulk-meta{font-size:12px;color:var(--subtle)}
+    .table-shell.compact th,.table-shell.compact td{padding:8px 10px;font-size:12px}
+    .table-shell.compact textarea{min-height:56px;padding:8px 10px}
+    .table-shell.compact input,.table-shell.compact select{padding:8px 10px;font-size:12px}
+    .table-shell.compact button{padding:8px 10px;font-size:12px}
+    .table-shell.compact .mini{font-size:11px}
+    .table-shell.compact .status-badge{padding:4px 8px;font-size:11px}
+    .cell-stack{display:grid;gap:8px}
+    .mini{font-size:12px;color:var(--subtle)}
+    .saved-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+    .saved-card{border:1px solid rgba(151,183,211,.14);border-radius:18px;padding:14px;background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.015))}
+    .saved-card strong{display:block;margin-bottom:6px;font-size:18px}
+    .saved-card .mini{margin-top:4px}
+    .recent-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+    .recent-card{border:1px solid rgba(151,183,211,.14);border-radius:18px;padding:14px;background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.015))}
+    .recent-card strong{display:block;margin-bottom:6px;font-size:18px}
+    .section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:12px}
+    .section-copy{max-width:60ch}
+    .table-shell{border:1px solid rgba(151,183,211,.12);border-radius:18px;overflow:auto;background:rgba(5,12,20,.42)}
+    .empty-state{padding:16px;border:1px dashed rgba(151,183,211,.18);border-radius:16px;color:var(--subtle);background:rgba(255,255,255,.02)}
+    .evidence-item{border:1px solid var(--border);border-radius:14px;padding:12px;margin-top:8px;background:rgba(255,255,255,.03)}
+    .evidence-preview{display:block;max-width:220px;max-height:160px;border-radius:8px;border:1px solid var(--border);margin-bottom:8px;object-fit:cover;background:rgba(255,255,255,.02)}
+    .lightbox{position:fixed;inset:0;background:rgba(5,8,13,.88);display:none;align-items:center;justify-content:center;padding:24px;z-index:1000}
+    .lightbox.open{display:flex}
+    .lightbox-inner{position:relative;max-width:min(96vw,1200px);max-height:90vh}
+    .lightbox img{display:block;max-width:100%;max-height:90vh;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:#0a0d13}
+    .lightbox-close{position:absolute;top:-14px;right:-14px;width:36px;height:36px;border-radius:999px;padding:0;font-size:22px;line-height:1;background:#111827;border:1px solid rgba(255,255,255,.18)}
+    .status-badge{display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;border:1px solid transparent}
+    .status-todo{background:rgba(151,183,211,.12);color:#d5e6f7;border-color:rgba(151,183,211,.18)}
+    .status-in_progress{background:rgba(60,184,255,.14);color:#9ddfff;border-color:rgba(60,184,255,.18)}
+    .status-needs_verification{background:rgba(255,210,122,.14);color:#ffe0a1;border-color:rgba(255,210,122,.2)}
+    .status-submitted{background:rgba(124,247,212,.14);color:#b8ffe7;border-color:rgba(124,247,212,.18)}
+    .status-live{background:rgba(119,221,171,.16);color:#bdf3d5;border-color:rgba(119,221,171,.22)}
+    .status-rejected{background:rgba(255,143,134,.16);color:#ffcdc7;border-color:rgba(255,143,134,.22)}
+    @media (max-width: 960px){
+      .top-grid,.action-grid{grid-template-columns:1fr}
+      .hero-meta{grid-template-columns:1fr}
+      .wrap{padding:16px}
+      h1{max-width:none}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top-grid">
+      <div class="card hero">
+        <p class="mini">Citation OS</p>
+        <h1>Citation Dashboard</h1>
+        <p id="status" class="section-copy">Loading…</p>
+        <div class="hero-meta">
+          <div class="hero-stat">
+            <span>Site</span>
+            <strong id="meta"></strong>
+          </div>
+          <div class="hero-stat">
+            <span>API</span>
+            <strong id="hint"></strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="action-grid">
+        <div class="card">
+          <h2>Input Domain</h2>
+          <p class="subtle">Enter the domain of the website in which you would like to make citation listings for.</p>
+          <div class="row">
+            <div class="grow"><input id="lookupUrlInput" type="text" placeholder="yourbusiness.com" /></div>
+            <button id="openSiteBtn" type="button">Save Site</button>
+          </div>
+          <p id="lookupStatus" class="subtle"></p>
+        </div>
+
+        <div class="card">
+          <h2>Save Listing URL</h2>
+          <p class="subtle">Paste a source listing URL and the backend will use the root domain to match or create the citation source automatically.</p>
+          <div class="row">
+            <div class="grow"><input id="listingUrlInput" type="text" placeholder="https://example.com/your-listing-url" /></div>
+            <button id="saveListingBtn" type="button">Save URL</button>
+          </div>
+          <p id="saveListingStatus" class="subtle"></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-head">
+        <div>
+          <h2>Evidence Upload</h2>
+          <p class="subtle section-copy">Attach proof links or small screenshots/files to a citation source.</p>
+        </div>
+      </div>
+      <div class="row">
+        <div class="grow"><select id="evidenceSource"></select></div>
+      </div>
+      <div class="row">
+        <div class="grow"><input id="evidenceUrlInput" type="text" placeholder="Proof URL (optional)" /></div>
+      </div>
+      <div class="row">
+        <div class="grow"><input id="evidenceFileInput" type="file" /></div>
+      </div>
+      <div class="row">
+        <div class="grow"><input id="evidenceNoteInput" type="text" placeholder="Short note (optional)" /></div>
+        <button id="saveEvidenceBtn" type="button">Upload Evidence</button>
+      </div>
+      <p id="saveEvidenceStatus" class="subtle"></p>
+      <div id="evidenceList"></div>
+    </div>
+
+    <div class="card">
+      <div class="section-head">
+        <div>
+          <h2>Saved Listings</h2>
+          <p class="subtle section-copy">These are the listings already saved for this site. If something you entered earlier feels missing, check here first.</p>
+        </div>
+      </div>
+      <div id="savedListings"></div>
+    </div>
+
+    <div class="card">
+      <div class="section-head">
+        <div>
+          <h2>Recently Updated</h2>
+          <p class="subtle section-copy">Latest citations that changed on this site. This uses the saved citation record timestamps from D1.</p>
+        </div>
+      </div>
+      <div id="recentlyUpdated"></div>
+    </div>
+
+    <div class="card">
+      <div class="section-head">
+        <div>
+          <h2>Source Progress</h2>
+          <p class="subtle section-copy">Full source inventory. A row shows as <code>todo</code> by default even before it has been explicitly saved.</p>
+        </div>
+      </div>
+      <div id="summary" class="summary-grid"></div>
+      <div class="row filters">
+        <div class="grow"><select id="sortRows"></select></div>
+        <div class="grow"><select id="filterStatus"></select></div>
+        <div class="grow"><select id="filterCategory"></select></div>
+        <div class="grow"><input id="filterSearch" type="text" placeholder="Search source or URL" /></div>
+        <label class="toggle-chip"><input id="filterSavedOnly" type="checkbox" /><span>Saved only</span></label>
+        <label class="toggle-chip"><input id="compactTableMode" type="checkbox" /><span>Compact table</span></label>
+      </div>
+      <div class="bulk-actions">
+        <div class="bulk-meta" id="bulkSelectionMeta">0 selected</div>
+        <div class="grow"><select id="bulkStatus"></select></div>
+        <div class="grow"><input id="bulkFollowUp" type="date" /></div>
+        <button type="button" id="bulkApplyBtn">Apply To Selected</button>
+        <button type="button" id="bulkClearBtn">Clear Selection</button>
+      </div>
+      <div id="table" class="table-shell"></div>
+    </div>
+
+    <div class="card">
+      <h2>Follow-up Queue</h2>
+      <p class="subtle">Use reminder dates to keep submitted or in-progress citations from stalling.</p>
+      <div id="followUpQueue" class="queue-grid"></div>
+    </div>
+  </div>
+  <div id="lightbox" class="lightbox" aria-hidden="true">
+    <div class="lightbox-inner">
+      <button id="lightboxClose" class="lightbox-close" type="button" aria-label="Close image">x</button>
+      <img id="lightboxImage" alt="Evidence preview" />
+    </div>
+  </div>
+
+<script>
+  const DEFAULT_API_BASE = "https://seo-agent.96psxbzqk2.workers.dev";
+  const STATUS_OPTIONS = ["todo", "in_progress", "needs_verification", "submitted", "live", "rejected"];
+  let citationsState = [];
+  const selectedSourceIds = new Set();
+  let headerSort = { key: "", dir: "asc" };
+  let apiToken = "";
+
+  function siteIdFromUrl() {
+    const u = new URL(location.href);
+    const q = u.searchParams.get("site_id");
+    if (q) return q;
+    const parts = u.pathname.split("/").filter(Boolean);
+    return parts[parts.length - 1] || null;
+  }
+
+  function normalizeApiBase() {
+    const u = new URL(location.href);
+    const fromQuery = u.searchParams.get("api_base");
+    if (fromQuery) return fromQuery.replace(/\/+$/, "");
+    if (location.hostname.endsWith("workers.dev")) return location.origin;
+    return DEFAULT_API_BASE;
+  }
+
+  function apiTokenFromUrl() {
+    const u = new URL(location.href);
+    return (u.searchParams.get("api_key") || "").trim();
+  }
+
+  async function authedFetch(url, options) {
+    const opts = options ? { ...options } : {};
+    const headers = new Headers(opts.headers || {});
+    if (apiToken) headers.set("authorization", `Bearer ${apiToken}`);
+    opts.headers = headers;
+    return fetch(url, opts);
+  }
+
+  function escapeHtml(v) {
+    return String(v || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function populateSourceSelect(rows) {
+    const options = [`<option value="">Select source...</option>`].concat(
+      rows.map((r) => `<option value="${escapeHtml(r.source_id)}">${escapeHtml(r.name)} (${escapeHtml(r.category)})</option>`)
+    );
+
+    const evidenceSelect = document.getElementById("evidenceSource");
+    evidenceSelect.innerHTML = options.join("");
+  }
+
+  function parseEvidence(raw) {
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function renderEvidenceList(sourceId) {
+    const source = citationsState.find((row) => row.source_id === sourceId);
+    const list = document.getElementById("evidenceList");
+    const apiBase = normalizeApiBase();
+    const siteId = siteIdFromUrl();
+    if (!source) {
+      list.innerHTML = "";
+      return;
+    }
+
+    const items = parseEvidence(source.evidence_json);
+    if (!items.length) {
+      list.innerHTML = `<p class="mini">No evidence saved for this source yet.</p>`;
+      return;
+    }
+
+    list.innerHTML = items
+      .map((item) => {
+        const note = item.note ? `<div class="mini">${escapeHtml(item.note)}</div>` : "";
+        if (item.kind === "link") {
+          return `<div class="evidence-item"><a href="${escapeHtml(item.url || "")}" target="_blank" rel="noopener">Open proof link</a>${note}</div>`;
+        }
+        const href = `${apiBase}/api/sites/${encodeURIComponent(siteId || "")}/citations/${encodeURIComponent(sourceId)}/evidence/${encodeURIComponent(item.id)}`;
+        const preview = String(item.content_type || "").startsWith("image/")
+          ? `<img class="evidence-preview evidence-preview-open" data-full-src="${href}" src="${href}" alt="${escapeHtml(item.file_name || "Evidence image")}" />`
+          : "";
+        return `<div class="evidence-item">${preview}<a href="${href}" target="_blank" rel="noopener">Download ${escapeHtml(item.file_name || "file")}</a>${note}</div>`;
+      })
+      .join("");
+  }
+
+  function openLightbox(src, alt) {
+    const lightbox = document.getElementById("lightbox");
+    const image = document.getElementById("lightboxImage");
+    image.setAttribute("src", src);
+    image.setAttribute("alt", alt || "Evidence preview");
+    lightbox.classList.add("open");
+    lightbox.setAttribute("aria-hidden", "false");
+  }
+
+  function closeLightbox() {
+    const lightbox = document.getElementById("lightbox");
+    const image = document.getElementById("lightboxImage");
+    lightbox.classList.remove("open");
+    lightbox.setAttribute("aria-hidden", "true");
+    image.removeAttribute("src");
+  }
+
+  function renderFilters(rows) {
+    const statusSelect = document.getElementById("filterStatus");
+    const categorySelect = document.getElementById("filterCategory");
+    const sortSelect = document.getElementById("sortRows");
+    const categories = Array.from(new Set(rows.map((row) => row.category).filter(Boolean))).sort();
+
+    statusSelect.innerHTML = [`<option value="">All statuses</option>`]
+      .concat(STATUS_OPTIONS.map((status) => `<option value="${escapeHtml(status)}">${escapeHtml(status)}</option>`))
+      .join("");
+    categorySelect.innerHTML = [`<option value="">All categories</option>`]
+      .concat(categories.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`))
+      .join("");
+    sortSelect.innerHTML = [
+      `<option value="recent">Sort: Recent</option>`,
+      `<option value="status">Sort: Status</option>`,
+      `<option value="name">Sort: Name</option>`,
+    ].join("");
+    document.getElementById("bulkStatus").innerHTML = [`<option value="">Bulk status (no change)</option>`]
+      .concat(STATUS_OPTIONS.map((status) => `<option value="${escapeHtml(status)}">${escapeHtml(status)}</option>`))
+      .join("");
+  }
+
+  function readUiStateFromUrl() {
+    const u = new URL(location.href);
+    return {
+      filterStatus: u.searchParams.get("filter_status") || "",
+      filterCategory: u.searchParams.get("filter_category") || "",
+      filterSearch: u.searchParams.get("filter_search") || "",
+      filterSavedOnly: u.searchParams.get("saved_only") === "1",
+      compactTableMode: u.searchParams.get("compact") === "1",
+      sortRows: u.searchParams.get("sort") || "recent",
+      headerSortKey: u.searchParams.get("sort_col") || "",
+      headerSortDir: u.searchParams.get("sort_dir") === "desc" ? "desc" : "asc",
+    };
+  }
+
+  function applyUiStateToControls() {
+    const state = readUiStateFromUrl();
+    document.getElementById("filterStatus").value = state.filterStatus;
+    document.getElementById("filterCategory").value = state.filterCategory;
+    document.getElementById("filterSearch").value = state.filterSearch;
+    document.getElementById("filterSavedOnly").checked = state.filterSavedOnly;
+    document.getElementById("compactTableMode").checked = state.compactTableMode;
+    document.getElementById("sortRows").value = state.sortRows;
+    headerSort = { key: state.headerSortKey, dir: state.headerSortDir };
+  }
+
+  function syncUiStateToUrl() {
+    const u = new URL(location.href);
+    const status = document.getElementById("filterStatus").value;
+    const category = document.getElementById("filterCategory").value;
+    const search = String(document.getElementById("filterSearch").value || "").trim();
+    const savedOnly = document.getElementById("filterSavedOnly").checked;
+    const compact = document.getElementById("compactTableMode").checked;
+    const sort = document.getElementById("sortRows").value || "recent";
+
+    const setOrDelete = (key, value) => {
+      if (value) u.searchParams.set(key, value);
+      else u.searchParams.delete(key);
+    };
+    setOrDelete("filter_status", status);
+    setOrDelete("filter_category", category);
+    setOrDelete("filter_search", search);
+    setOrDelete("saved_only", savedOnly ? "1" : "");
+    setOrDelete("compact", compact ? "1" : "");
+    setOrDelete("sort", sort !== "recent" ? sort : "");
+    setOrDelete("sort_col", headerSort.key || "");
+    setOrDelete("sort_dir", headerSort.key ? headerSort.dir : "");
+    history.replaceState(null, "", u.toString());
+  }
+
+  function renderSummary(rows) {
+    const counts = {
+      total: rows.length,
+      saved: rows.filter((row) => row.listing_url).length,
+      live: rows.filter((row) => row.status === "live").length,
+      submitted: rows.filter((row) => row.status === "submitted").length,
+      in_progress: rows.filter((row) => row.status === "in_progress").length,
+      todo: rows.filter((row) => row.status === "todo").length,
+      due: rows.filter((row) => row.follow_up_at).length,
+      custom: rows.filter((row) => String(row.source_id || "").startsWith("src_custom_")).length,
+    };
+
+    document.getElementById("summary").innerHTML = [
+      { label: "Total Sources", value: counts.total },
+      { label: "Saved URLs", value: counts.saved },
+      { label: "Live", value: counts.live },
+      { label: "Submitted", value: counts.submitted },
+      { label: "In Progress", value: counts.in_progress },
+      { label: "With Reminder", value: counts.due },
+      { label: "Todo", value: counts.todo },
+      { label: "Custom", value: counts.custom },
+    ]
+      .map((item) => `<div class="summary-card"><strong>${item.value}</strong><span class="mini">${escapeHtml(item.label)}</span></div>`)
+      .join("");
+  }
+
+  function renderSavedListings(rows) {
+    const saved = rows
+      .filter((row) => row.listing_url)
+      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+
+    const root = document.getElementById("savedListings");
+    if (!saved.length) {
+      root.innerHTML = `<div class="empty-state">No listing URLs have been saved for this site yet.</div>`;
+      return;
+    }
+
+    root.innerHTML = `<div class="saved-grid">${saved
+      .map(
+        (row) => `<div class="saved-card">
+          <strong>${escapeHtml(row.name)}</strong>
+          <div class="mini">${escapeHtml(row.category)} • <span class="status-badge status-${escapeHtml(row.status || "todo")}">${escapeHtml((row.status || "todo").replace(/_/g, " "))}</span></div>
+          <div class="mini">${row.follow_up_at ? `Reminder: ${escapeHtml(row.follow_up_at)}` : "No reminder date set"}</div>
+          <p><a href="${escapeHtml(row.listing_url)}" target="_blank" rel="noopener">Open saved listing</a></p>
+        </div>`
+      )
+      .join("")}</div>`;
+  }
+
+  function relativeUpdatedAt(unixSeconds) {
+    if (!unixSeconds) return "No updates yet";
+    const diffMs = Date.now() - (Number(unixSeconds) * 1000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    if (diffHours < 1) return "Updated less than 1h ago";
+    if (diffHours < 24) return `Updated ${diffHours}h ago`;
+    if (diffDays === 1) return "Updated 1 day ago";
+    return `Updated ${diffDays}d ago`;
+  }
+
+  function renderRecentlyUpdated(rows) {
+    const recent = rows
+      .filter((row) => row.updated_at)
+      .sort((a, b) => Number(b.updated_at || 0) - Number(a.updated_at || 0))
+      .slice(0, 8);
+
+    const root = document.getElementById("recentlyUpdated");
+    if (!recent.length) {
+      root.innerHTML = `<div class="empty-state">No saved citation updates yet for this site.</div>`;
+      return;
+    }
+
+    root.innerHTML = `<div class="recent-grid">${recent
+      .map(
+        (row) => `<div class="recent-card">
+          <strong>${escapeHtml(row.name)}</strong>
+          <div class="mini">${escapeHtml(row.category)} • <span class="status-badge status-${escapeHtml(row.status || "todo")}">${escapeHtml((row.status || "todo").replace(/_/g, " "))}</span></div>
+          <div class="mini">${escapeHtml(relativeUpdatedAt(row.updated_at))}</div>
+          <div class="mini">${row.listing_url ? "Saved listing URL present" : "No listing URL saved yet"}</div>
+        </div>`
+      )
+      .join("")}</div>`;
+  }
+
+  function daysUntil(dateText) {
+    if (!dateText) return null;
+    const target = new Date(`${dateText}T00:00:00`);
+    if (Number.isNaN(target.getTime())) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return Math.round((target.getTime() - today.getTime()) / 86400000);
+  }
+
+  function followUpLabel(dateText) {
+    const delta = daysUntil(dateText);
+    if (delta == null) return "";
+    if (delta < 0) return `${Math.abs(delta)}d overdue`;
+    if (delta === 0) return "Due today";
+    if (delta === 1) return "Due tomorrow";
+    return `Due in ${delta}d`;
+  }
+
+  function renderFollowUpQueue(rows) {
+    const activeStatuses = new Set(["in_progress", "needs_verification", "submitted"]);
+    const queue = rows
+      .filter((row) => row.follow_up_at && activeStatuses.has(String(row.status || "todo")))
+      .map((row) => ({ ...row, delta: daysUntil(row.follow_up_at) }))
+      .filter((row) => row.delta != null)
+      .sort((a, b) => {
+        if (a.delta !== b.delta) return a.delta - b.delta;
+        return String(a.name || "").localeCompare(String(b.name || ""));
+      });
+
+    const groups = [
+      { key: "overdue", label: "Overdue", items: queue.filter((row) => row.delta < 0) },
+      { key: "today", label: "Today", items: queue.filter((row) => row.delta === 0) },
+      { key: "upcoming", label: "Upcoming", items: queue.filter((row) => row.delta > 0).slice(0, 12) },
+    ];
+
+    document.getElementById("followUpQueue").innerHTML = groups
+      .map((group) => {
+        const content = group.items.length
+          ? `<div class="queue-list">${group.items
+              .map(
+                (row) => `<div class="queue-item" data-source-id="${escapeHtml(row.source_id)}" tabindex="0" role="button" aria-label="Jump to ${escapeHtml(row.name)}">
+                  <strong>${escapeHtml(row.name)}</strong>
+                  <div class="mini">${escapeHtml(row.category)} • ${escapeHtml(row.status || "todo")}</div>
+                  <div class="mini">${escapeHtml(row.follow_up_at)} • ${escapeHtml(followUpLabel(row.follow_up_at))}</div>
+                </div>`
+              )
+              .join("")}</div>`
+          : `<p class="mini">Nothing here.</p>`;
+        return `<div class="queue-box"><h3>${escapeHtml(group.label)}</h3>${content}</div>`;
+      })
+      .join("");
+  }
+
+  function filteredRows() {
+    const status = document.getElementById("filterStatus").value;
+    const category = document.getElementById("filterCategory").value;
+    const search = String(document.getElementById("filterSearch").value || "").trim().toLowerCase();
+    const savedOnly = document.getElementById("filterSavedOnly").checked;
+
+    return citationsState.filter((row) => {
+      if (status && row.status !== status) return false;
+      if (category && row.category !== category) return false;
+      if (savedOnly && !row.listing_url) return false;
+      if (!search) return true;
+      const haystack = [row.name, row.category, row.listing_url, row.notes, row.last_step].filter(Boolean).join(" ").toLowerCase();
+      return haystack.includes(search);
+    });
+  }
+
+  function statusRank(status) {
+    const order = {
+      needs_verification: 0,
+      in_progress: 1,
+      submitted: 2,
+      live: 3,
+      todo: 4,
+      rejected: 5,
+    };
+    return Object.prototype.hasOwnProperty.call(order, status) ? order[status] : 99;
+  }
+
+  function sortedRows(rows) {
+    const sortMode = document.getElementById("sortRows").value || "recent";
+    const copy = rows.slice();
+    copy.sort((a, b) => {
+      if (headerSort.key) {
+        const dir = headerSort.dir === "desc" ? -1 : 1;
+        if (headerSort.key === "source") return String(a.name || "").localeCompare(String(b.name || "")) * dir;
+        if (headerSort.key === "category") return String(a.category || "").localeCompare(String(b.category || "")) * dir;
+        if (headerSort.key === "status") {
+          const diff = statusRank(String(a.status || "todo")) - statusRank(String(b.status || "todo"));
+          return (diff === 0 ? String(a.name || "").localeCompare(String(b.name || "")) : diff) * dir;
+        }
+        if (headerSort.key === "follow_up") {
+          const left = String(a.follow_up_at || "9999-99-99");
+          const right = String(b.follow_up_at || "9999-99-99");
+          return left.localeCompare(right) * dir;
+        }
+        if (headerSort.key === "updated") {
+          return (Number(a.updated_at || 0) - Number(b.updated_at || 0)) * dir;
+        }
+      }
+      if (sortMode === "name") {
+        return String(a.name || "").localeCompare(String(b.name || ""));
+      }
+      if (sortMode === "status") {
+        const diff = statusRank(String(a.status || "todo")) - statusRank(String(b.status || "todo"));
+        if (diff !== 0) return diff;
+        return String(a.name || "").localeCompare(String(b.name || ""));
+      }
+      const recentDiff = Number(b.updated_at || 0) - Number(a.updated_at || 0);
+      if (recentDiff !== 0) return recentDiff;
+      return String(a.name || "").localeCompare(String(b.name || ""));
+    });
+    return copy;
+  }
+
+  function renderTable(rows) {
+    const tableShell = document.getElementById("table");
+    tableShell.classList.toggle("compact", document.getElementById("compactTableMode").checked);
+    const sortArrow = (key) => {
+      if (headerSort.key !== key) return "";
+      return headerSort.dir === "desc" ? " ▼" : " ▲";
+    };
+    const sortClass = (key) => (headerSort.key === key ? "sortable active-sort" : "sortable");
+    let html = `<table><thead><tr>
+      <th class="check-col"><input type="checkbox" id="checkAllRows" /></th>
+      <th class="${sortClass("source")}" data-sort-col="source">Source${sortArrow("source")}</th>
+      <th class="${sortClass("category")}" data-sort-col="category">Category${sortArrow("category")}</th>
+      <th class="${sortClass("status")}" data-sort-col="status">Status${sortArrow("status")}</th>
+      <th class="${sortClass("follow_up")}" data-sort-col="follow_up">Follow-up${sortArrow("follow_up")}</th>
+      <th>Claim</th><th>Listing</th><th>Notes</th>
+      <th class="${sortClass("updated")}" data-sort-col="updated">Updated${sortArrow("updated")}</th>
+      <th>Action</th>
+    </tr></thead><tbody>`;
+
+    for (const r of rows) {
+      html += `<tr id="citation-row-${escapeHtml(r.source_id)}" class="citation-row-target">
+        <td class="check-col"><input type="checkbox" class="row-select" data-source-id="${escapeHtml(r.source_id)}"${selectedSourceIds.has(r.source_id) ? " checked" : ""} /></td>
+        <td><div class="cell-stack"><strong>${escapeHtml(r.name)}</strong><span class="mini">${escapeHtml(r.last_step || "")}</span></div></td>
+        <td><span class="pill">${escapeHtml(r.category)}</span></td>
+        <td>
+          <div class="mini" style="margin-bottom:8px"><span class="status-badge status-${escapeHtml(r.status || "todo")}">${escapeHtml((r.status || "todo").replace(/_/g, " "))}</span></div>
+          <select data-source-id="${escapeHtml(r.source_id)}" class="citation-status">
+            ${STATUS_OPTIONS.map((status) => `<option value="${escapeHtml(status)}"${r.status === status ? " selected" : ""}>${escapeHtml(status)}</option>`).join("")}
+          </select>
+        </td>
+        <td><input data-source-id="${escapeHtml(r.source_id)}" class="citation-follow-up" type="date" value="${escapeHtml(r.follow_up_at || "")}" /></td>
+        <td>${r.claim_url ? `<a href="${escapeHtml(r.claim_url)}" target="_blank" rel="noopener">Open</a>` : ""}</td>
+        <td>${r.listing_url ? `<a href="${escapeHtml(r.listing_url)}" target="_blank" rel="noopener">View</a>` : ""}</td>
+        <td><textarea data-source-id="${escapeHtml(r.source_id)}" class="citation-notes" placeholder="Add notes...">${escapeHtml(r.notes || "")}</textarea></td>
+        <td><span class="mini">${escapeHtml(relativeUpdatedAt(r.updated_at))}</span></td>
+        <td><button type="button" data-source-id="${escapeHtml(r.source_id)}" class="save-citation-btn">Save</button></td>
+      </tr>`;
+    }
+
+    html += `</tbody></table>`;
+    tableShell.innerHTML = html;
+    const checkAll = document.getElementById("checkAllRows");
+    if (checkAll) {
+      const visibleIds = rows.map((r) => r.source_id);
+      checkAll.checked = visibleIds.length > 0 && visibleIds.every((id) => selectedSourceIds.has(id));
+    }
+  }
+
+  function renderCitations() {
+    const rows = sortedRows(filteredRows());
+    renderSummary(rows);
+    renderSavedListings(citationsState);
+    renderRecentlyUpdated(citationsState);
+    renderFollowUpQueue(citationsState);
+    renderTable(rows);
+    document.getElementById("bulkSelectionMeta").textContent = `${selectedSourceIds.size} selected`;
+    syncUiStateToUrl();
+  }
+
+  function jumpToCitationRow(sourceId) {
+    const row = document.getElementById(`citation-row-${sourceId}`);
+    if (!row) return;
+    row.scrollIntoView({ behavior: "smooth", block: "center" });
+    row.classList.add("row-focus");
+    window.setTimeout(() => row.classList.remove("row-focus"), 1800);
+  }
+
+  async function loadCitations(apiBase, siteId) {
+    const res = await authedFetch(`${apiBase}/api/sites/${encodeURIComponent(siteId)}/citations`);
+    if (!res.ok) {
+      document.getElementById("status").textContent = `API error: ${res.status}`;
+      return;
+    }
+
+    const data = await res.json();
+    const rows = data.citations || [];
+    citationsState = rows;
+    const savedCount = rows.filter((row) => row.listing_url).length;
+    document.getElementById("status").textContent = `Loaded ${rows.length} sources. ${savedCount} listing URLs are already saved for this site.`;
+    populateSourceSelect(rows);
+    renderFilters(rows);
+    applyUiStateToControls();
+    renderCitations();
+    const evidenceSelect = document.getElementById("evidenceSource");
+    if (!evidenceSelect.value && rows.length) evidenceSelect.value = rows[0].source_id;
+    renderEvidenceList(evidenceSelect.value);
+  }
+
+  function normalizeDomainInput(raw) {
+    const text = String(raw || "").trim().toLowerCase();
+    if (!text) return "";
+    try {
+      const withScheme = /^https?:\/\//.test(text) ? text : `https://${text}`;
+      return new URL(withScheme).hostname.replace(/^www\./, "");
+    } catch {
+      return "";
+    }
+  }
+
+  async function resolveSiteFromDomain(apiBase) {
+    const input = document.getElementById("lookupUrlInput");
+    const statusEl = document.getElementById("lookupStatus");
+    const lookupDomain = normalizeDomainInput(input.value || "");
+
+    if (!lookupDomain) {
+      statusEl.textContent = "Enter a domain first.";
+      return;
+    }
+
+    statusEl.textContent = "Opening site dashboard...";
+
+    try {
+      const res = await authedFetch(`${apiBase}/api/sites/resolve?domain=${encodeURIComponent(lookupDomain)}`);
+      const payload = await res.json();
+      if (!res.ok) {
+        statusEl.textContent = `Unable to open site (${res.status}): ${payload.error || "Unknown error"}`;
+        return;
+      }
+
+      const siteId = payload?.site?.id;
+      if (!siteId) {
+        statusEl.textContent = "Unable to resolve site ID.";
+        return;
+      }
+
+      const u = new URL(location.href);
+      u.searchParams.set("site_id", siteId);
+      u.searchParams.set("api_base", apiBase);
+      location.href = u.toString();
+    } catch (err) {
+      statusEl.textContent = `Unable to open site: ${String(err)}`;
+    }
+  }
+
+  async function saveListingUrl(apiBase, siteId) {
+    const listingUrl = (document.getElementById("listingUrlInput").value || "").trim();
+    const statusEl = document.getElementById("saveListingStatus");
+    const button = document.getElementById("saveListingBtn");
+
+    if (!listingUrl) {
+      statusEl.textContent = "Enter a listing URL first.";
+      return;
+    }
+
+    button.disabled = true;
+    statusEl.textContent = "Saving URL...";
+
+    try {
+      const res = await authedFetch(`${apiBase}/api/sites/${encodeURIComponent(siteId)}/listing-url`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          listing_url: listingUrl,
+        }),
+      });
+
+      const payload = await res.json();
+      if (!res.ok) {
+        statusEl.textContent = `Save failed (${res.status}): ${payload.error || "Unknown error"}`;
+        return;
+      }
+
+      statusEl.textContent = `Saved to ${payload.source_name || payload.source_id}. Source progress table is refreshed.`;
+      await loadCitations(apiBase, siteId);
+    } catch (err) {
+      statusEl.textContent = `Save failed: ${String(err)}`;
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function saveCitationDetails(apiBase, siteId, sourceId) {
+    if (!siteId) return;
+    const statusEl = document.getElementById("saveListingStatus");
+    const statusInput = document.querySelector(`.citation-status[data-source-id="${CSS.escape(sourceId)}"]`);
+    const notesInput = document.querySelector(`.citation-notes[data-source-id="${CSS.escape(sourceId)}"]`);
+    const followUpInput = document.querySelector(`.citation-follow-up[data-source-id="${CSS.escape(sourceId)}"]`);
+    if (!statusInput || !notesInput || !followUpInput) return;
+
+    statusEl.textContent = `Saving ${sourceId}...`;
+    try {
+      const res = await authedFetch(`${apiBase}/api/sites/${encodeURIComponent(siteId)}/citations/${encodeURIComponent(sourceId)}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          status: statusInput.value,
+          notes: notesInput.value,
+          follow_up_at: followUpInput.value || null,
+        }),
+      });
+      const payload = await res.json();
+      if (!res.ok) {
+        statusEl.textContent = `Save failed (${res.status}): ${payload.error || "Unknown error"}`;
+        return;
+      }
+
+      statusEl.textContent = `Saved ${sourceId}.`;
+      await loadCitations(apiBase, siteId);
+    } catch (err) {
+      statusEl.textContent = `Save failed: ${String(err)}`;
+    }
+  }
+
+  async function applyBulkActions(apiBase, siteId) {
+    if (!siteId) return;
+    if (selectedSourceIds.size === 0) {
+      document.getElementById("saveListingStatus").textContent = "Select at least one row first.";
+      return;
+    }
+
+    const bulkStatus = document.getElementById("bulkStatus").value;
+    const bulkFollowUp = document.getElementById("bulkFollowUp").value;
+    const hasStatus = Boolean(bulkStatus);
+    const hasFollowUp = Boolean(bulkFollowUp);
+    if (!hasStatus && !hasFollowUp) {
+      document.getElementById("saveListingStatus").textContent = "Pick a bulk status and/or follow-up date.";
+      return;
+    }
+
+    const selectedIds = Array.from(selectedSourceIds);
+    document.getElementById("saveListingStatus").textContent = `Applying bulk update to ${selectedIds.length} row(s)...`;
+
+    for (const sourceId of selectedIds) {
+      const row = citationsState.find((item) => item.source_id === sourceId);
+      if (!row) continue;
+
+      const payload = {
+        status: hasStatus ? bulkStatus : (row.status || "todo"),
+        notes: row.notes || "",
+        follow_up_at: hasFollowUp ? bulkFollowUp : (row.follow_up_at || null),
+      };
+
+      const res = await authedFetch(`${apiBase}/api/sites/${encodeURIComponent(siteId)}/citations/${encodeURIComponent(sourceId)}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        document.getElementById("saveListingStatus").textContent = `Bulk update failed on ${sourceId}: ${body.error || res.status}`;
+        return;
+      }
+    }
+
+    document.getElementById("saveListingStatus").textContent = `Bulk update applied to ${selectedIds.length} row(s).`;
+    await loadCitations(apiBase, siteId);
+  }
+
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result || "");
+        const base64 = result.includes(",") ? result.split(",")[1] : "";
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function saveEvidence(apiBase, siteId) {
+    if (!siteId) return;
+    const sourceId = document.getElementById("evidenceSource").value;
+    const evidenceUrl = String(document.getElementById("evidenceUrlInput").value || "").trim();
+    const evidenceFile = document.getElementById("evidenceFileInput").files[0];
+    const note = String(document.getElementById("evidenceNoteInput").value || "").trim();
+    const statusEl = document.getElementById("saveEvidenceStatus");
+    const button = document.getElementById("saveEvidenceBtn");
+
+    if (!sourceId) {
+      statusEl.textContent = "Pick a source first.";
+      return;
+    }
+    if (!evidenceUrl && !evidenceFile) {
+      statusEl.textContent = "Add either a proof URL or a file.";
+      return;
+    }
+
+    button.disabled = true;
+    statusEl.textContent = "Uploading evidence...";
+
+    try {
+      const body = { note };
+      if (evidenceUrl) body.evidence_url = evidenceUrl;
+      if (evidenceFile) {
+        body.file_name = evidenceFile.name;
+        body.content_type = evidenceFile.type || "application/octet-stream";
+        body.data_base64 = await fileToBase64(evidenceFile);
+      }
+
+      const res = await authedFetch(`${apiBase}/api/sites/${encodeURIComponent(siteId)}/citations/${encodeURIComponent(sourceId)}/evidence`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const payload = await res.json();
+      if (!res.ok) {
+        statusEl.textContent = `Upload failed (${res.status}): ${payload.error || "Unknown error"}`;
+        return;
+      }
+
+      statusEl.textContent = `Uploaded. Evidence count: ${payload.evidence_count}`;
+      document.getElementById("evidenceUrlInput").value = "";
+      document.getElementById("evidenceFileInput").value = "";
+      document.getElementById("evidenceNoteInput").value = "";
+      await loadCitations(apiBase, siteId);
+      document.getElementById("evidenceSource").value = sourceId;
+      renderEvidenceList(sourceId);
+    } catch (err) {
+      statusEl.textContent = `Upload failed: ${String(err)}`;
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function load() {
+    const siteId = siteIdFromUrl();
+    const apiBase = normalizeApiBase();
+    apiToken = apiTokenFromUrl();
+    document.getElementById("meta").textContent = siteId || "(missing site_id)";
+    document.getElementById("hint").textContent = apiToken ? `${apiBase} (token auth)` : apiBase;
+
+    document.getElementById("saveListingBtn").addEventListener("click", () => saveListingUrl(apiBase, siteId));
+    document.getElementById("saveEvidenceBtn").addEventListener("click", () => saveEvidence(apiBase, siteId));
+    document.getElementById("openSiteBtn").addEventListener("click", () => resolveSiteFromDomain(apiBase));
+    document.getElementById("evidenceSource").addEventListener("change", (event) => {
+      renderEvidenceList(event.target.value);
+    });
+    document.getElementById("sortRows").addEventListener("change", () => {
+      headerSort = { key: "", dir: "asc" };
+      renderCitations();
+    });
+    document.getElementById("filterStatus").addEventListener("change", renderCitations);
+    document.getElementById("filterCategory").addEventListener("change", renderCitations);
+    document.getElementById("filterSearch").addEventListener("input", renderCitations);
+    document.getElementById("filterSavedOnly").addEventListener("change", renderCitations);
+    document.getElementById("compactTableMode").addEventListener("change", renderCitations);
+    document.getElementById("bulkApplyBtn").addEventListener("click", () => applyBulkActions(apiBase, siteId));
+    document.getElementById("bulkClearBtn").addEventListener("click", () => {
+      selectedSourceIds.clear();
+      renderCitations();
+    });
+    document.getElementById("table").addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const sortable = target.closest("th[data-sort-col]");
+      if (sortable) {
+        const key = sortable.getAttribute("data-sort-col");
+        if (!key) return;
+        if (headerSort.key === key) headerSort.dir = headerSort.dir === "asc" ? "desc" : "asc";
+        else headerSort = { key, dir: "asc" };
+        renderCitations();
+        return;
+      }
+      const button = target.closest(".save-citation-btn");
+      if (!button) return;
+      const sourceId = button.getAttribute("data-source-id");
+      if (!sourceId) return;
+      saveCitationDetails(apiBase, siteId, sourceId);
+    });
+    document.getElementById("table").addEventListener("change", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.id === "checkAllRows" && target instanceof HTMLInputElement) {
+        const visible = sortedRows(filteredRows()).map((row) => row.source_id);
+        if (target.checked) visible.forEach((id) => selectedSourceIds.add(id));
+        else visible.forEach((id) => selectedSourceIds.delete(id));
+        renderCitations();
+        return;
+      }
+      if (target.classList.contains("row-select") && target instanceof HTMLInputElement) {
+        const sourceId = target.getAttribute("data-source-id");
+        if (!sourceId) return;
+        if (target.checked) selectedSourceIds.add(sourceId);
+        else selectedSourceIds.delete(sourceId);
+        document.getElementById("bulkSelectionMeta").textContent = `${selectedSourceIds.size} selected`;
+      }
+    });
+    document.getElementById("followUpQueue").addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const item = target.closest(".queue-item[data-source-id]");
+      if (!item) return;
+      const sourceId = item.getAttribute("data-source-id");
+      if (!sourceId) return;
+      jumpToCitationRow(sourceId);
+    });
+    document.getElementById("followUpQueue").addEventListener("keydown", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const item = target.closest(".queue-item[data-source-id]");
+      if (!item) return;
+      event.preventDefault();
+      const sourceId = item.getAttribute("data-source-id");
+      if (!sourceId) return;
+      jumpToCitationRow(sourceId);
+    });
+    document.getElementById("lookupUrlInput").addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        resolveSiteFromDomain(apiBase);
+      }
+    });
+    document.getElementById("evidenceList").addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      const image = target.closest(".evidence-preview-open");
+      if (!image) return;
+      openLightbox(image.getAttribute("data-full-src") || image.getAttribute("src") || "", image.getAttribute("alt") || "");
+    });
+    document.getElementById("lightboxClose").addEventListener("click", closeLightbox);
+    document.getElementById("lightbox").addEventListener("click", (event) => {
+      if (event.target === event.currentTarget) closeLightbox();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeLightbox();
+    });
+
+    if (!siteId) {
+      document.getElementById("saveListingBtn").setAttribute("disabled", "disabled");
+      document.getElementById("saveEvidenceBtn").setAttribute("disabled", "disabled");
+      document.getElementById("status").textContent = "Enter a domain above and press Enter to open or create a site dashboard.";
+      return;
+    }
+
+    document.getElementById("saveListingBtn").removeAttribute("disabled");
+    document.getElementById("saveEvidenceBtn").removeAttribute("disabled");
+    applyUiStateToControls();
+    await loadCitations(apiBase, siteId);
+  }
+
+  load();
+</script>
+</body>
+</html>

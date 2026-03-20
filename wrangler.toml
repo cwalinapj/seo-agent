@@ -1,0 +1,26 @@
+name = "seo-agent"
+main = "src/index.ts"
+compatibility_date = "2025-12-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "seo_agent"
+database_id = "4771794d-9318-4524-b8c6-14e283117d95"
+
+[[r2_buckets]]
+binding = "EVIDENCE_BUCKET"
+bucket_name = "seo-agent-evidence"
+
+[triggers]
+crons = ["5 16 * * *"] # daily 16:05 UTC (~8:05am PT)
+
+[vars]
+MAIL_FROM_EMAIL = "admin@aiwpdev.com"
+MAIL_FROM_NAME = "AI SEO Agent"
+DASHBOARD_BASE_URL = "https://aiwpadmin.com" # optional (for links in email)
+ADMIN_API_TOKEN = "" # set in production and pass via Authorization header or ?api_key
+ALLOWED_SITE_IDS = "" # optional comma-separated site IDs restriction
+OTRUST_SSO_LOGIN_URL = "" # set to your OTrust/IdP login URL
+OTRUST_SSO_CLIENT_ID = "" # optional
+BROWSER_CHECKER_URL = "" # ex: https://your-browser-checker.example.com
+BROWSER_CHECKER_TOKEN = "" # optional bearer token shared with browser checker
