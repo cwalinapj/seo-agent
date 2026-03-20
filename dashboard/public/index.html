@@ -86,6 +86,9 @@
     .bulk-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:6px}
     .bulk-actions .grow{min-width:170px}
     .bulk-meta{font-size:12px;color:var(--subtle)}
+    .pager{display:flex;gap:10px;align-items:center;justify-content:flex-end;margin-top:10px}
+    .pager button{padding:8px 10px;font-size:12px}
+    .pager .meta{font-size:12px;color:var(--subtle)}
     .table-shell.compact th,.table-shell.compact td{padding:8px 10px;font-size:12px}
     .table-shell.compact textarea{min-height:56px;padding:8px 10px}
     .table-shell.compact input,.table-shell.compact select{padding:8px 10px;font-size:12px}
@@ -237,6 +240,11 @@
         <button type="button" id="bulkClearBtn">Clear Selection</button>
       </div>
       <div id="table" class="table-shell"></div>
+      <div class="pager">
+        <button type="button" id="prevPageBtn">Prev</button>
+        <span class="meta" id="pageMeta">Page 1</span>
+        <button type="button" id="nextPageBtn">Next</button>
+      </div>
     </div>
 
     <div class="card">
@@ -259,6 +267,9 @@
   const selectedSourceIds = new Set();
   let headerSort = { key: "", dir: "asc" };
   let apiToken = "";
+  let tablePage = 1;
+  const TABLE_PAGE_SIZE = 25;
+  let searchDebounceTimer = null;
 
   function siteIdFromUrl() {
     const u = new URL(location.href);
@@ -589,6 +600,17 @@
     });
   }
 
+  function pagedRows(rows) {
+    const totalPages = Math.max(1, Math.ceil(rows.length / TABLE_PAGE_SIZE));
+    if (tablePage > totalPages) tablePage = totalPages;
+    if (tablePage < 1) tablePage = 1;
+    const start = (tablePage - 1) * TABLE_PAGE_SIZE;
+    return {
+      totalPages,
+      rows: rows.slice(start, start + TABLE_PAGE_SIZE),
+    };
+  }
+
   function statusRank(status) {
     const order = {
       needs_verification: 0,
@@ -687,11 +709,15 @@
 
   function renderCitations() {
     const rows = sortedRows(filteredRows());
+    const paged = pagedRows(rows);
     renderSummary(rows);
     renderSavedListings(citationsState);
     renderRecentlyUpdated(citationsState);
     renderFollowUpQueue(citationsState);
-    renderTable(rows);
+    renderTable(paged.rows);
+    document.getElementById("pageMeta").textContent = `Page ${tablePage} / ${paged.totalPages}`;
+    document.getElementById("prevPageBtn").disabled = tablePage <= 1;
+    document.getElementById("nextPageBtn").disabled = tablePage >= paged.totalPages;
     document.getElementById("bulkSelectionMeta").textContent = `${selectedSourceIds.size} selected`;
     syncUiStateToUrl();
   }
@@ -834,7 +860,20 @@
       }
 
       statusEl.textContent = `Saved ${sourceId}.`;
-      await loadCitations(apiBase, siteId);
+      const idx = citationsState.findIndex((row) => row.source_id === sourceId);
+      if (idx >= 0) {
+        citationsState[idx] = {
+          ...citationsState[idx],
+          status: statusInput.value,
+          notes: notesInput.value || null,
+          follow_up_at: followUpInput.value || null,
+          updated_at: payload.updated_at || citationsState[idx].updated_at,
+          last_step: "Citation updated from dashboard",
+        };
+        renderCitations();
+      } else {
+        await loadCitations(apiBase, siteId);
+      }
     } catch (err) {
       statusEl.textContent = `Save failed: ${String(err)}`;
     }
@@ -969,13 +1008,37 @@
     });
     document.getElementById("sortRows").addEventListener("change", () => {
       headerSort = { key: "", dir: "asc" };
+      tablePage = 1;
       renderCitations();
     });
-    document.getElementById("filterStatus").addEventListener("change", renderCitations);
-    document.getElementById("filterCategory").addEventListener("change", renderCitations);
-    document.getElementById("filterSearch").addEventListener("input", renderCitations);
-    document.getElementById("filterSavedOnly").addEventListener("change", renderCitations);
+    document.getElementById("filterStatus").addEventListener("change", () => {
+      tablePage = 1;
+      renderCitations();
+    });
+    document.getElementById("filterCategory").addEventListener("change", () => {
+      tablePage = 1;
+      renderCitations();
+    });
+    document.getElementById("filterSearch").addEventListener("input", () => {
+      if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(() => {
+        tablePage = 1;
+        renderCitations();
+      }, 180);
+    });
+    document.getElementById("filterSavedOnly").addEventListener("change", () => {
+      tablePage = 1;
+      renderCitations();
+    });
     document.getElementById("compactTableMode").addEventListener("change", renderCitations);
+    document.getElementById("prevPageBtn").addEventListener("click", () => {
+      tablePage -= 1;
+      renderCitations();
+    });
+    document.getElementById("nextPageBtn").addEventListener("click", () => {
+      tablePage += 1;
+      renderCitations();
+    });
     document.getElementById("bulkApplyBtn").addEventListener("click", () => applyBulkActions(apiBase, siteId));
     document.getElementById("bulkClearBtn").addEventListener("click", () => {
       selectedSourceIds.clear();
